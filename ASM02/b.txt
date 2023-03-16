@@ -1,0 +1,185 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <dirent.h>
+#include<sys/stat.h>
+
+#define BUF_SIZE 4096                   /* use a buffer size of 4096 bytes */
+#define OUTPUT_MODE 0700                /* protection bits for output file */
+#define MAX_PATH_LENGTH 4096		/* maximum length of file path */
+#define MAX_CMD_LENGTH 10240		/* maximum length of command */
+#define MAX_CMD_ELEMENTS 3		/* maximum number of elements in a command */
+
+int parseCommand(char *, char **, int);
+int copyFile(char *, char *);
+int listDir(char *);
+
+int main ()
+{
+   char cmd[MAX_CMD_LENGTH];
+   int numOfArg, ret;
+   char *args[MAX_CMD_ELEMENTS];
+
+   for(int i = 0; i < MAX_CMD_ELEMENTS; i++)
+	args[i] = malloc(MAX_PATH_LENGTH);
+
+   printf("Enter command: ");
+   fgets(cmd, MAX_CMD_LENGTH, stdin);
+   cmd[strlen(cmd)-1] = 0;
+
+   numOfArg = parseCommand(cmd, args, 3);
+
+   if (numOfArg >= 2){
+      if(strcmp(args[0],"ls") == 0){
+
+         // TO DO
+         listDir(args[1]);
+
+      } else if(strcmp(args[0],"mkdir") == 0){
+
+		   //TO DO
+         makeDir(args[1]);
+         
+	   } else if(strcmp(args[0],"cp") == 0){
+         if(numOfArg >= 3){
+           // TO DO
+            copyFile(args[1], args[2]);
+         } else
+		      printf ("%s: missing destination file operand after %s\n", args[0], args[1]);
+	   } else if(strcmp(args[0],"mv") == 0){
+		   //TO DO
+         mvFile(args[1], args[2]);
+	   } else
+	      printf("%s: command not found\n", args[0]);
+   } else
+	   printf("%s: missing arguments\n", cmd);
+
+   for(int i = 0; i<3; i++)
+	   free(args[i]);	
+   
+   return 0;
+}
+
+/*
+ * Parse command that user enter
+ * [IN] command: command string, including name and arguments
+ * [OUT] arg: array of arguments. The first elements of this array is the name of command
+ * [IN] max: maximum number of element in arg[] array
+ * Return: number of arguments in the command 
+*/
+int parseCommand(char *command, char *arg[], int max){
+   char *tmp;
+   tmp = strtok(command," ");
+   int count = 0;
+
+   while(tmp != NULL){
+	strncpy(arg[count], tmp, 4096);
+	count++;
+	tmp = strtok(NULL, " ");
+	if (count == max) break;
+   }
+
+   return count;
+}
+
+/*
+ * Copy file
+ * [IN] source: Pointer to the string containing the path of source file
+ * [IN] dest: Pointer to the string containing the path of destination file
+ * Return: 0 if successful, otherwise return -1 
+*/
+int copyFile(char *source, char *dest){
+   int in_fd, out_fd, rd_count, wt_count;
+   char buffer[BUF_SIZE];
+        
+   in_fd=open(source, O_RDONLY);          /* open the source file */
+   if (in_fd < 0) return errno;           /* if it cannot be opened, exit */
+        
+   out_fd=creat(dest, OUTPUT_MODE);       /* create the destination file */
+   if (out_fd < 0) return errno;          /* if it cannot be created, exit */
+
+   /* Copy loop */
+   while (1) {
+	rd_count=read(in_fd, buffer, BUF_SIZE);    /* read a block if data */
+   	if (rd_count <= 0) break;               /* if end of file or error, exit loop */
+
+        wt_count = write(out_fd, buffer, rd_count);       /* write data */
+        if (wt_count <= 0) return errno;                /* wt_count<=0 is an error */
+   }
+
+   /* Close the files */
+   close(in_fd);
+   close(out_fd);
+
+   if (rd_count == 0)    /* no error on last read */
+	 return 0;
+   else
+	 return errno;        /* error on last read */
+}
+
+/*
+ * List the name of files and sub-directory in a directory
+ * [IN] dirname: Pointer to the string containing the name of directory
+ * Return: 0 if successful, otherwise return -1 
+*/
+int listDir(char *dirname){
+   DIR *dir;
+   struct dirent *subdir;
+
+   dir = opendir(dirname);
+
+   if(dir == NULL){
+      printf("%s\n", strerror(errno));
+      return -1;
+   } else {
+      while ((subdir = readdir(dir)) != NULL)
+         if(strcmp(subdir->d_name,".") != 0 && strcmp(subdir->d_name,"..") != 0)
+         printf("%s\n", subdir->d_name);
+      closedir(dir);
+	   return 0;
+   }
+}
+
+/*
+ * Make a directory
+ * [IN] newDir: Pointer to the string containing the name of directory
+ * Return: 0 if successful, otherwise return -1 
+ */
+int makeDir (char *newDir){
+
+   // 1. Process mkdir
+   int check = mkdir(newDir, 0777);
+
+   // 2. condition success or fail
+   if(check) {
+      printf("Unable to create directory\n");
+      return -1;
+   }
+   return 0;
+}
+
+/*
+ * Move file 
+ *[IN] source: Pointer to the string containing the path of source file
+ * [IN] dest: Pointer to the string containing the path of destination file
+ * Return: 0 if successful, otherwise return -1 
+ */
+int mvFile (char *source, char *dest){
+	
+   // 1. Process rename
+   if(copyFile(source, dest) != 0) return -1;
+   int tmp = remove(source);
+
+	// 2. Condition success or fail
+   if(tmp == 0){
+      return 0;
+   }
+   else{
+      remove(dest);
+      printf("Unable to move this file\n");
+      return -1;
+   }
+}
